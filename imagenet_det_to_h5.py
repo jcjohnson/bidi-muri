@@ -18,10 +18,11 @@ parser.add_argument('--det_val_dir', default='data/imagenet/ILSVRC2013_DET_val')
 parser.add_argument('--devkit_dir', default='data/imagenet/ILSVRC2014/ILSVRC2014_devkit')
 parser.add_argument('--val_bbox_dir', default='data/imagenet/ILSVRC2013_DET_bbox_val')
 parser.add_argument('--output_h5_file', default='data/ilsvrc14-det.h5')
-parser.add_argument('--output_json_file', default='data/ilsvrc15-det.json')
+parser.add_argument('--output_json_file', default='data/ilsvrc14-det.json')
 parser.add_argument('--num_synsets', default=200, type=int)
 parser.add_argument('--num_workers', default=10, type=int)
 parser.add_argument('--image_size', default=224, type=int)
+parser.add_argument('--debug_max_images', default=-1, type=int)
 args = parser.parse_args()
 
 
@@ -132,14 +133,18 @@ def add_train_label_arrays(synset_info, all_image_ids, dicts, h5_file):
   h5_file.create_dataset('train_hardnegs', data=train_hardnegs)
 
   
-def add_images(image_id_to_idx, image_dir, dset_name, h5_file):
-  num_images = len(image_id_to_idx)
+def add_images(idx_to_image_id, image_dir, dset_name, h5_file):
+  num_images = len(idx_to_image_id)
   dset_size = (num_images, 3, args.image_size, args.image_size)
-  dset = h5_file.create_dataset(dset_name, dset_size)
+  if args.debug_max_images > 0:
+    dset_size = (min(dset_size[0], args.debug_max_images),) + dset_size[1:]
+  dset = h5_file.create_dataset(dset_name, dset_size, dtype=np.uint8)
 
   q = Queue()
   lock = Lock()
-  for i, (image_id, idx) in enumerate(image_id_to_idx.iteritems()):
+  for idx, image_id in sorted(idx_to_image_id.iteritems()):
+  # for i, (image_id, idx) in enumerate(image_id_to_idx.iteritems()):
+    if args.debug_max_images > 0 and idx >= args.debug_max_images: break
     filename = os.path.join(image_dir, '%s.JPEG' % image_id)
     q.put((idx, filename))
 
@@ -165,70 +170,27 @@ def add_images(image_id_to_idx, image_dir, dset_name, h5_file):
       lock.acquire()
       if images_read % 50 == 0:
         print 'worker has read %d images; queue has %d remaining' % (images_read, q.qsize())
-      dset[i] = img.transpose(2, 0, 1)  # Swap HWC -> CHW
+      # print img.shape, img.sum(), 'writing to ', idx
+      dset[idx] = img.transpose(2, 0, 1)  # Swap HWC -> CHW
       lock.release()
       q.task_done()
       
       if q.empty(): return
 
-  worker()
-  #for i in xrange(args.num_workers):
-  #  t = Thread(target=worker)
-  #  t.daemon = True
-  #  t.start()
-  #q.join()
-
-
-def add_train_images(dicts, h5_file):
-  add_images(dicts['image_id_to_idx'], args.det_train_dir, 'train_images', h5_file)
-
-
-def add_val_images(dicts, h5_file):
-  add_images(dicts['val_image_id_to_idx'], args.det_val_dir, 'val_images', h5_file)
-
-
-def add_train_images_old(synset_info, all_image_ids, dicts, h5_file):
-  # NUM_IMAGES = 5000
-  num_train_images = len(all_image_ids)
-  lock = Lock()
-
-  dset_size = (num_train_images, 3, args.image_size, args.image_size)
-  image_dset = h5_file.create_dataset('train_images', dset_size)
-  print 'done creating dataset'
-  
-  q = Queue()
-  for i, (image_id, idx) in enumerate(dicts['image_id_to_idx'].iteritems()):
-    filename = os.path.join(args.det_train_dir, '%s.JPEG' % image_id)
-    q.put((idx, filename))
-    # if i >= NUM_IMAGES: break
-      
-  print 'done enqueing images'
-      
-  def worker():
-    images_read = 0
-    while True:
-      idx, filename = q.get()
-      img = imread(filename)
-      # Handle grayscale
-      if img.ndim == 2:
-        img = img[:, :, None][:, :, [0, 0, 0]]
-      img = imresize(img, (args.image_size, args.image_size))
-      # Swap RGB to BGR
-      img = img[:, :, [2, 1, 0]]
-      images_read += 1
-      
-      lock.acquire()
-      if images_read % 50 == 0:
-        print 'worker has read %d images; queue has %d remaining' % (images_read, q.qsize())
-      image_dset[i] = img.transpose(2, 0, 1)  # Swap HWC -> CHW
-      lock.release()
-      q.task_done()
-      
   for i in xrange(args.num_workers):
     t = Thread(target=worker)
     t.daemon = True
     t.start()
   q.join()
+
+
+def add_train_images(dicts, h5_file):
+  add_images(dicts['idx_to_image_id'], args.det_train_dir, 'train_images', h5_file)
+
+
+def add_val_images(dicts, h5_file):
+  add_images(dicts['val_idx_to_image_id'], args.det_val_dir, 'val_images', h5_file)
+
 
   
 # mutates dicts in-place to add val_image_id_to_idx and val_idx_to_image_id
