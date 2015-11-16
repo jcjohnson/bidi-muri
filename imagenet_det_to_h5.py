@@ -1,4 +1,4 @@
-import json, os, glob, random, argparse
+import json, os, glob, random, argparse, time
 from Queue import Queue
 from threading import Thread, Lock
 import xml.etree.ElementTree as ET
@@ -16,6 +16,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--det_train_dir', default='data/imagenet/ILSVRC2014_DET_train')
 parser.add_argument('--det_val_dir', default='data/imagenet/ILSVRC2013_DET_val')
 parser.add_argument('--devkit_dir', default='data/imagenet/ILSVRC2014/ILSVRC2014_devkit')
+parser.add_argument('--train_bbox_dir', default='data/imagenet/ILSVRC2014_DET_bbox_train')
 parser.add_argument('--val_bbox_dir', default='data/imagenet/ILSVRC2013_DET_bbox_val')
 parser.add_argument('--output_h5_file', default='data/ilsvrc14-det.h5')
 parser.add_argument('--output_json_file', default='data/ilsvrc14-det.json')
@@ -121,7 +122,7 @@ def add_train_label_arrays(synset_info, all_image_ids, dicts, h5_file):
   train_hardnegs = np.zeros((num_train_images, args.num_synsets), dtype=np.uint8)
 
   for synset in synset_info:
-    det_id = synset['det_id'] - 1
+    det_id = synset['det_id']
     for image_id in synset['pos_image_ids']:
       idx = image_id_to_idx[image_id]
       train_labels[idx, det_id - 1] = 1
@@ -169,7 +170,8 @@ def add_images(idx_to_image_id, image_dir, dset_name, h5_file):
       
       lock.acquire()
       if images_read % 50 == 0:
-        print 'worker has read %d images; queue has %d remaining' % (images_read, q.qsize())
+        pass
+        # print 'worker has read %d images; queue has %d remaining' % (images_read, q.qsize())
       # print img.shape, img.sum(), 'writing to ', idx
       dset[idx] = img.transpose(2, 0, 1)  # Swap HWC -> CHW
       lock.release()
@@ -177,6 +179,15 @@ def add_images(idx_to_image_id, image_dir, dset_name, h5_file):
       
       if q.empty(): return
 
+  def print_worker():
+    while True:
+      print 'queue has %d items remaining' % q.qsize()
+      time.sleep(3)
+      
+  t = Thread(target=print_worker)
+  t.daemon = True
+  t.start()
+  
   for i in xrange(args.num_workers):
     t = Thread(target=worker)
     t.daemon = True
@@ -223,7 +234,36 @@ def read_val_xml(xml_file, dicts):
   return det_ids
 
 
+
+def add_labels(idx_to_image_id, dicts, xml_dir, dset_name, h5_file):
+  num_images = len(idx_to_image_id)
+  if args.debug_max_images > 0:
+    num_images = min(num_images, args.debug_max_images)
+  labels = np.zeros((num_images, args.num_synsets), dtype=np.uint8)
+  for (idx, image_id) in sorted(idx_to_image_id.iteritems()):
+    if args.debug_max_images > 0 and idx >= args.debug_max_images: break
+    xml_file = os.path.join(xml_dir, '%s.xml' % image_id)
+    if not os.path.isfile(xml_file):
+      print 'WARNING: could not find XML file %s' % xml_file
+      continue
+    det_ids = read_val_xml(xml_file, dicts)
+    for det_id in det_ids:
+      labels[idx, det_id - 1] = 1
+      
+  h5_file.create_dataset(dset_name, data=labels)
+
+  
+def add_train_labels(dicts, h5_file):
+  idx_to_image_id = dicts['idx_to_image_id']
+  add_labels(idx_to_image_id, dicts, args.train_bbox_dir, 'train_labels', h5_file)
+
+
 def add_val_labels(dicts, h5_file):
+  idx_to_image_id = dicts['val_idx_to_image_id']
+  add_labels(idx_to_image_id, dicts, args.val_bbox_dir, 'val_labels', h5_file)
+  
+
+def add_val_labels_old(dicts, h5_file):
   print 'Building label array for val images:'
   num_val_images = len(dicts['val_image_id_to_idx'])
   
@@ -251,7 +291,8 @@ def main():
 
   # Dump data to HDF5 output file
   with h5py.File(args.output_h5_file, 'w') as f:
-    add_train_label_arrays(synset_info, all_image_ids, dicts, f)
+    # add_train_label_arrays(synset_info, all_image_ids, dicts, f)
+    add_train_labels(dicts, f)
     add_train_images(dicts, f)
     add_val_labels(dicts, f)
     add_val_images(dicts, f)
