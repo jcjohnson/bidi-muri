@@ -162,6 +162,7 @@ def add_images(idx_to_image_id, image_dir, dset_name, h5_file):
       except ValueError as e:
         lock.acquire()
         print 'Error reading file ', filename
+        q.task_done()
         lock.release()
         continue
       # Swap RGB to BGR
@@ -179,11 +180,12 @@ def add_images(idx_to_image_id, image_dir, dset_name, h5_file):
       
       if q.empty(): return
 
+  master_joined = False
   def print_worker():
     while True:
-      print 'queue has %d items remaining' % q.qsize()
+      print 'queue has %d items remaining' % q.qsize(), master_joined
       time.sleep(3)
-      
+  
   t = Thread(target=print_worker)
   t.daemon = True
   t.start()
@@ -192,7 +194,9 @@ def add_images(idx_to_image_id, image_dir, dset_name, h5_file):
     t = Thread(target=worker)
     t.daemon = True
     t.start()
+
   q.join()
+  master_joined = True
 
 
 def add_train_images(dicts, h5_file):

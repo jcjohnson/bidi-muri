@@ -1,15 +1,8 @@
 require 'hdf5'
-local cjson = require 'cjson'
+local utils = require 'utils'
 
 local DataLoader = torch.class('DataLoader')
 
-
-local function read_json(path)
-  local file = assert(io.open(path, 'r'))
-  local text = file:read()
-  file:close()
-  return cjson.decode(text)
-end
 
 
 function DataLoader:__init(opt)
@@ -19,7 +12,7 @@ function DataLoader:__init(opt)
   assert(opt.num_trainval, 'Must provide num_trainval')
   self.h5_file = hdf5.open(opt.h5_file, 'r')
   self.json_file = opt.json_file
-  self.json_dicts = read_json(opt.json_file)
+  self.json_dicts = utils.read_json(opt.json_file)
   self.batch_size = opt.batch_size
   self.split_idxs = {
     train = 1,

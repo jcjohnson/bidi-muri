@@ -9,12 +9,13 @@ require 'DataLoader'
 require 'MulticlassLogisticCriterion'
 require 'optim_updates'
 local eval_utils = require 'eval_utils'
+local utils = require 'utils'
 
 
 cmd = torch.CmdLine()
 cmd:option('-model', 'vgg-16')
-cmd:option('-h5_file', 'data/ilsvrc14-10k-det.h5')
-cmd:option('-json_file', 'data/ilsvrc14-10k-det.json')
+cmd:option('-h5_file', 'data/ilsvrc14-50k-det.h5')
+cmd:option('-json_file', 'data/ilsvrc14-50k-det.json')
 cmd:option('-num_trainval', 1000)
 cmd:option('-backend', 'cudnn')
 cmd:option('-batch_size', 32)
@@ -127,9 +128,11 @@ local function main()
     if iter > 1 and iter % opt.save_checkpoint_every == 1 then
       print('Saving checkpoint to ' .. opt.checkpoint_name)
       local checkpoint = {}
-      checkpoint.model = model
       checkpoint.train_loss_history = train_loss_history
       checkpoint.trainval_stat_history = trainval_stat_history
+      utils.write_json(opt.checkpoint_name .. '.json', checkpoint)
+      checkpoint.model = model
+      checkpoint.opt = opt
       torch.save(opt.checkpoint_name, checkpoint)
     end
     
