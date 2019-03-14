@@ -11,8 +11,8 @@ require 'MulticlassLogisticCriterion'
 
 
 cmd = torch.CmdLine()
-cmd:option('-h5_file', 'data/ilsvrc14-50k-det.h5')
-cmd:option('-json_file', 'data/ilsvrc14-50k-det.json')
+cmd:option('-h5_file', 'data/ilsvrc14-det.h5')
+cmd:option('-json_file', 'data/ilsvrc14-det.json')
 cmd:option('-num_trainval', 1000)
 cmd:option('-batch_size', 32)
 cmd:option('-split', 'val')

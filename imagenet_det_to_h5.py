@@ -15,7 +15,7 @@ from scipy.io import loadmat
 parser = argparse.ArgumentParser()
 parser.add_argument('--det_train_dir', default='data/imagenet/ILSVRC2014_DET_train')
 parser.add_argument('--det_val_dir', default='data/imagenet/ILSVRC2013_DET_val')
-parser.add_argument('--devkit_dir', default='data/imagenet/ILSVRC2014/ILSVRC2014_devkit')
+parser.add_argument('--devkit_dir', default='data/imagenet/ILSVRC2014_devkit')
 parser.add_argument('--train_bbox_dir', default='data/imagenet/ILSVRC2014_DET_bbox_train')
 parser.add_argument('--val_bbox_dir', default='data/imagenet/ILSVRC2013_DET_bbox_val')
 parser.add_argument('--output_h5_file', default='data/ilsvrc14-det.h5')
@@ -250,6 +250,8 @@ def add_labels(idx_to_image_id, dicts, xml_dir, dset_name, h5_file):
     if not os.path.isfile(xml_file):
       print 'WARNING: could not find XML file %s' % xml_file
       continue
+    else:
+      print 'Found XMl file %s' % xml_file
     det_ids = read_val_xml(xml_file, dicts)
     for det_id in det_ids:
       labels[idx, det_id - 1] = 1
